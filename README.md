@@ -1,54 +1,142 @@
-# 🏭 Warehouse MARL - AI Fleet Control
+# 🏭 Warehouse MARL
 
-An advanced Multi-Agent Reinforcement Learning (MARL) simulation interface for warehouse robot fleet management. Built with **Golang (Wails)** and **Svelte**, featuring a modern Cyberpunk/Industrial aesthetic.
+<h3>
+  <div align="center">
+  A State-of-the-Art Multi-Agent Reinforcement Learning Simulation
+  </div>
+</h3>
+
+<div align="center">
+
+[![Go Version](https://img.shields.io/badge/go-1.21-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Wails](https://img.shields.io/badge/Wails-v2.9.2-c020f5?style=flat&logo=wails)](https://wails.io)
+[![Svelte](https://img.shields.io/badge/Svelte-4.0-ff3e00?style=flat&logo=svelte)](https://svelte.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+
+</div>
+
+---
+
+## 🎯 What is Warehouse MARL?
+
+**Warehouse MARL** is an advanced simulation engine designed for testing and visualizing Multi-Agent Reinforcement Learning (MARL) algorithms in complex logistics environments. It bridges the gap between high-performance Go-based backend simulation and Python-based AI training.
+
+Built with a **Cyberpunk Industrial** aesthetic, it offers a real-time, interactive interface for researchers and developers to experiment with robot fleet coordination, pathfinding, and task allocation strategies.
+
+---
 
 ## ✨ Features
 
-- **Interactive Grid Editor**: Design warehouse layouts with racks, robots, and tasks.
-- **Real-time Simulation**: Visualize robot movements, task completion, and fleet coordination.
-- **AI Bridge**: Connects to Python-based Reinforcement Learning models via HTTP/Websockets.
-- **Cyberpunk UI**: Premium dark-mode interface with glassmorphism and neon accents.
-- **Fleet Statistics**: Monitor utility, task completion rates, and active agents.
+### 🎮 Interactive Grid Editor
+Directly manipulate the warehouse environment in a "God Mode" view.
+- **Racks & Obstacles**: Place storage units and barriers.
+- **Robot Spawning**: Deploy fleet agents with a click.
+- **Task Injection**: Dynamic task allocation editor.
 
-## 🚀 Getting Started
+### 🤖 Multi-Agent Coordination
+Visualize complex swarm behaviors in real-time.
+- **Collision Avoidance**: Watch agents negotiate paths.
+- **Cooperative Transport**: Simulates multi-bot payloads.
+- **Pathfinding Debug**: Visual overlays for agent decision processes.
+
+### 🔌 AI Brain Bridge
+Seamlessly connects to external RL training loops.
+- **HTTP/WebSocket API**: Real-time state exchange.
+- **Python Integration**: Compatible with PyTorch/TensorFlow backends.
+- **State Serialization**: Save/Load complex training scenarios.
+
+### 📊 Live Telemetry
+- **Fleet Utility**: Real-time efficiency tracking.
+- **Task Throughput**: Monitor items processed per minute.
+- **Agent Health**: Status monitoring for individual bots.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    User[User Interface] <-->|Interactive Events| Frontend[Svelte Frontend]
+    Frontend <-->|Wails Bridge| Backend[Go Simulation Engine]
+    Backend <-->|HTTP/JSON| AI_Brain[Python RL Model]
+    AI_Brain -.->|Action Logits| Backend
+    Backend -.->|State Vector| AI_Brain
+```
+
+1.  **Frontend (Svelte)**: Handles rendering, user input, and state visualization via a reactive glassmorphism UI.
+2.  **Backend (Go/Wails)**: Manages the 'Ground Truth' simulation state, physics, and communication.
+3.  **AI Brain (Python)**: External service (Flask/FastAPI) that decides agent actions based on observations.
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
+*   **Go 1.21+**
+*   **Node.js 18+**
+*   **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
-- **Go** 1.21+
-- **Node.js** 18+
-- **Wails** (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
-
-### Running Locally
-
+### 1️⃣ Start the AI Server
+Ensure your Python environment is ready and the brain is listening.
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/warehouse-marl.git
+cd ai_server
+pip install -r requirements.txt
+python app.py
+```
 
-# Enter the UI directory
+### 2️⃣ Run the Simulation UI
+Launch the desktop application in development mode.
+```bash
 cd warehouse_ui
-
-# Run in Development Mode
 wails dev
 ```
 
-### Building for Production
-
+### 3️⃣ Build for Production
+Create a standalone executable.
 ```bash
 wails build -platform windows/amd64
+# Output: build/bin/warehouse_ui.exe
 ```
-The executable will be in `build/bin/warehouse_ui.exe`.
 
-## 🧠 AI Integration
+---
 
-To run the AI brain backend:
-1. Navigate to `ai_server/`.
-2. Install requirements using Python.
-3. Run `python app.py` (or your entry point).
-4. Connect via the "Connect" button in the UI.
+## 📁 Project Structure
+
+```
+warehouse-marl/
+├── ai_server/          # 🧠 Python RL Environment
+│   ├── models/         # Trained PPO/DQN models
+│   └── app.py          # Observation API
+├── warehouse_ui/       # 🖥️ Wails Application
+│   ├── app.go          # Go/Frontend Bridge
+│   ├── main.go         # Application Entry
+│   └── frontend/       # Svelte UI Source
+│       ├── src/        # Components & Logic
+│       └── wailsjs/    # Auto-generated bindings
+└── data/               # 💾 Simulation Layouts
+```
+
+---
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Go (Wails Framework)
-- **Frontend**: Svelte, CSS3 (Variables + Flex/Grid)
-- **Design**: "Cyberpunk Industrial" Theme
+<div align="center">
 
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Frontend** | ![Svelte](https://img.shields.io/badge/Svelte-ff3e00?style=flat-square&logo=svelte) | Reactive UI Framework |
+| **Backend** | ![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go) | High-performance Simulation Logic |
+| **Framework** | ![Wails](https://img.shields.io/badge/Wails-c020f5?style=flat-square&logo=wails) | Go/JS Interop Wrapper |
+| **AI Core** | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python) | RL Training & Inference |
+
+</div>
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+
+<div align="center">
+  <sub>Built with ❤️ by JullMol</sub>
+</div>
