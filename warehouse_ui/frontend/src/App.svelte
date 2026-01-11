@@ -2,34 +2,32 @@
   import { onMount } from 'svelte';
   import { CheckAIConnection, GetDefaultLayout, InitAIEnv, GetRobotAction, SaveLayout } from '../wailsjs/go/main/App';
 
-  // State
   let layout = null;
   let aiConnected = false;
   let simRunning = false;
   let robotPositions = [];
-  let targets = []; // Array of [row, col]
+  let targets = [];
   let step = 0;
-  let editMode = 'rack'; // rack, robot, task, erase
-  let statusMessage = 'SYSTEM INITIALIZING...';
+  let editMode = 'rack';
+  let statusMessage = 'INITIALIZING SYSTEMS...';
   let intervalId = null;
   let gridSize = 20;
   let totalWorkload = 0;
+  let currentTime = '';
 
-  // Constants & Config
-  const CELL_SIZE = 34; // Increased slightly
+  const CELL_SIZE = 32;
   
-  // Theme Colors (mapped from style.css for JS logic)
   const COLORS = {
-    rack: '#ffbf00',    // Amber
-    robot: ['#00f0ff', '#7000ff', '#ff0055', '#00ff9d'], // Cyan, Purple, Red, Green
-    target: '#00ff9d',  // Green
+    rack: '#f59e0b',
+    robot: ['#00f0ff', '#a855f7', '#ec4899', '#10b981'],
+    target: '#10b981',
   };
 
   const EDIT_MODES = [
-    { id: 'rack', label: 'RACK', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z' }, // Box/Square
-    { id: 'robot', label: 'BOT', icon: 'M12 2a2 2 0 0 1 2 2c0 .74-.4 1.38-1 1.72V7h-2v-.28c-.6-.34-1-.98-1-1.72a2 2 0 0 1 2-2zm-2 6h4v3h2v-1h2v6h-2v-2h-6v2H8V9h2V8zm4 7h-4v7h4v-7z' }, // Robot (simplified)
-    { id: 'task', label: 'TASK', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z' }, // Check circle
-    { id: 'erase', label: 'DEL', icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z' }, // Trash
+    { id: 'rack', label: 'RACK', icon: 'M4 4h16v16H4z', color: 'var(--accent-amber)' },
+    { id: 'robot', label: 'ROBOT', icon: 'M12 2a2 2 0 012 2c0 .74-.4 1.38-1 1.72V7h-2v-1.28c-.6-.34-1-.98-1-1.72a2 2 0 012-2zm-4 8h8v10H8V10zm2 2v2h4v-2h-4z', color: 'var(--accent-cyan)' },
+    { id: 'task', label: 'TASK', icon: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z', color: 'var(--accent-green)' },
+    { id: 'erase', label: 'ERASE', icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z', color: 'var(--accent-red)' },
   ];
 
   onMount(async () => {
@@ -37,11 +35,18 @@
       layout = await GetDefaultLayout();
       syncPositions();
       checkConnection();
+      updateTime();
+      setInterval(updateTime, 1000);
     } catch (e) {
       console.error('Error loading layout:', e);
-      statusMessage = '❌ LAYOUT LOAD ERROR';
+      statusMessage = 'LAYOUT LOAD ERROR';
     }
   });
+
+  function updateTime() {
+    const now = new Date();
+    currentTime = now.toLocaleTimeString('en-US', { hour12: false });
+  }
 
   function syncPositions() {
     if (!layout) return;
@@ -53,21 +58,21 @@
     try {
       const result = await CheckAIConnection();
       aiConnected = result.connected;
-      statusMessage = aiConnected ? '🟢 AI ONLINE' : '🔴 AI OFFLINE';
+      statusMessage = aiConnected ? 'AI CORE ONLINE' : 'AI CORE OFFLINE';
     } catch {
       aiConnected = false;
-      statusMessage = '🔴 DISCONNECTED';
+      statusMessage = 'CONNECTION FAILED';
     }
   }
 
   function handleCellClick(row, col) {
     if (simRunning) return;
-    if (row === 0 || row === gridSize-1 || col === 0 || col === gridSize-1) return; // Walls
+    if (row === 0 || row === gridSize-1 || col === 0 || col === gridSize-1) return;
 
     if (editMode === 'rack') {
       if (hasRobotAt(row, col) < 0 && !hasTaskAt(row, col)) {
         layout.map_data[row][col] = layout.map_data[row][col] === 0 ? 1 : 0;
-        layout = layout; // Trigger reactivity
+        layout = layout;
       }
     } else if (editMode === 'robot') {
       if (layout.map_data[row][col] === 0 && hasRobotAt(row, col) < 0) {
@@ -81,14 +86,13 @@
         const newTask = { item_id: `ITEM_${layout.task_pool.length}`, pos: [row, col] };
         layout.task_pool = [...layout.task_pool, newTask];
         targets = [...targets, [row, col]];
-        statusMessage = `TASK ADDED: [${row},${col}]`;
+        statusMessage = `TASK ASSIGNED [${row},${col}]`;
       }
     } else if (editMode === 'erase') {
         const robotIdx = robotPositions.findIndex(p => p[0] === row && p[1] === col);
         if (robotIdx >= 0) {
             const newRobots = layout.robots.filter((_, i) => i !== robotIdx);
             const newPositions = robotPositions.filter((_, i) => i !== robotIdx);
-            // Re-index robots
             layout.robots = newRobots.map((r, i) => ({ ...r, id: i }));
             robotPositions = [...newPositions];
             layout = {...layout};
@@ -116,18 +120,17 @@
   }
 
   async function startSimulation() {
-    if (!aiConnected) { statusMessage = '⚠️ AI DISCONNECTED'; return; }
-    if (layout.robots.length === 0) { statusMessage = '⚠️ NO ROBOTS'; return; }
-    if (layout.task_pool.length === 0) { statusMessage = '⚠️ NO TASKS'; return; }
+    if (!aiConnected) { statusMessage = 'AI DISCONNECTED'; return; }
+    if (layout.robots.length === 0) { statusMessage = 'NO ROBOTS DEPLOYED'; return; }
+    if (layout.task_pool.length === 0) { statusMessage = 'NO TASKS ASSIGNED'; return; }
     
     await SaveLayout(layout, 'simulation.json');
     await InitAIEnv('../data/layouts/simulation.json');
     
-    // Reset positions to spawn
     robotPositions = layout.robots.map(r => [...r.spawn_pos]);
     step = 0;
     simRunning = true;
-    statusMessage = '▶️ SIMULATION ACTIVE';
+    statusMessage = 'SIMULATION ACTIVE';
     runSimLoop();
   }
 
@@ -157,7 +160,6 @@
           else if (action === 3) x--;
           else if (action === 4) x++;
 
-          // Collision check (basic)
           if (y >= 0 && y < gridSize && x >= 0 && x < gridSize && layout.map_data[y][x] !== 1) {
              robotPositions[i] = [y, x];
           }
@@ -175,7 +177,7 @@
 
       if (completedCount >= robotPositions.length) {
         stopSimulation();
-        statusMessage = '✅ MISSION COMPLETE';
+        statusMessage = 'MISSION COMPLETE';
       }
     }, 150);
   }
@@ -183,7 +185,7 @@
   function stopSimulation() {
     simRunning = false;
     if (intervalId) clearInterval(intervalId);
-    statusMessage = '⏹️ SIMULATION PAUSED';
+    statusMessage = 'SIMULATION PAUSED';
   }
 
   function resetSimulation() {
@@ -191,7 +193,7 @@
     robotPositions = layout.robots.map(r => [...r.spawn_pos]);
     targets = layout.task_pool.map(t => t.pos);
     step = 0;
-    statusMessage = '🔄 SYSTEM RESET';
+    statusMessage = 'SYSTEM RESET';
   }
 
   function clearAll() {
@@ -206,10 +208,9 @@
     robotPositions = [];
     targets = [];
     layout = layout;
-    statusMessage = '⚠️ GRID CLEARED';
+    statusMessage = 'GRID CLEARED';
   }
 
-  // Helpers
   function hasRobotAt(row, col) {
     return robotPositions.findIndex(p => p[0] === row && p[1] === col);
   }
@@ -222,43 +223,72 @@
   {#if !layout}
     <div class="loader-container">
       <div class="spinner"></div>
-      <p class="mono" style="color: var(--accent-primary)">INITIALIZING SYSTEM...</p>
+      <p class="mono" style="color: var(--accent-cyan); font-size: 1rem; letter-spacing: 0.2em;">INITIALIZING SYSTEMS...</p>
     </div>
   {:else}
-    <!-- Top Bar -->
-    <header class="glass">
+    <div class="hud-corner top-left"></div>
+    <div class="hud-corner top-right"></div>
+    <div class="hud-corner bottom-left"></div>
+    <div class="hud-corner bottom-right"></div>
+
+    <header class="glass-accent">
       <div class="brand">
-        <div class="logo-icon">💠</div>
-        <div>
-          <h1>WAREHOUSE<span style="color:var(--accent-primary)">MARL</span></h1>
-          <span class="subtitle">FLEET CONTROL SYSTEM</span>
+        <div class="logo-container">
+          <div class="logo-ring"></div>
+          <div class="logo-icon">W</div>
+        </div>
+        <div class="brand-text">
+          <h1 class="heading">WAREHOUSE<span class="text-gradient">MARL</span></h1>
+          <span class="subtitle mono">FLEET CONTROL SYSTEM v2.0</span>
         </div>
       </div>
       
-      <div class="status-bar mono glow-panel">
-        <span class="status-dot" class:online={aiConnected}></span>
-        {statusMessage}
+      <div class="status-display">
+        <div class="status-item">
+          <span class="status-label mono">TIME</span>
+          <span class="status-value mono">{currentTime}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label mono">STEP</span>
+          <span class="status-value mono">{step.toString().padStart(4, '0')}</span>
+        </div>
+        <div class="status-bar glass" class:online={aiConnected}>
+          <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span class="status-ring"></span>
+          </div>
+          <span class="mono">{statusMessage}</span>
+        </div>
       </div>
 
-      <div class="actions">
-        <button class="btn btn-secondary" on:click={checkConnection}>RECONNECT</button>
+      <div class="header-actions">
+        <button class="btn btn-secondary" on:click={checkConnection}>
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          RECONNECT
+        </button>
       </div>
     </header>
 
     <div class="content-wrapper">
-      <!-- Sidebar Tools -->
-      <aside class="sidebar glass">
-        <section>
-          <h3 class="mono">EDIT MODE</h3>
+      <aside class="sidebar glass-accent">
+        <section class="tool-section">
+          <div class="section-header">
+            <div class="section-line"></div>
+            <h3 class="mono">EDIT MODE</h3>
+            <div class="section-line"></div>
+          </div>
           <div class="tool-grid">
             {#each EDIT_MODES as mode}
               <button 
                 class="tool-btn" 
                 class:active={editMode === mode.id}
+                style="--tool-color: {mode.color}"
                 on:click={() => editMode = mode.id}
                 disabled={simRunning}
               >
-                <svg class="icon" viewBox="0 0 24 24"><path d={mode.icon} fill="currentColor"/></svg>
+                <div class="tool-icon">
+                  <svg viewBox="0 0 24 24"><path d={mode.icon} fill="currentColor"/></svg>
+                </div>
                 <span class="mono">{mode.label}</span>
               </button>
             {/each}
@@ -266,73 +296,94 @@
         </section>
 
         <section class="controls-section">
-          <h3 class="mono">SIMULATION</h3>
+          <div class="section-header">
+            <div class="section-line"></div>
+            <h3 class="mono">SIMULATION</h3>
+            <div class="section-line"></div>
+          </div>
           <div class="control-group">
-            <button class="btn btn-primary" on:click={startSimulation} disabled={simRunning}>
-              <span>▶ START</span>
+            <button class="btn btn-primary control-btn" on:click={startSimulation} disabled={simRunning}>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+              START
             </button>
-            <button class="btn btn-warning" on:click={stopSimulation} disabled={!simRunning}>
-              <span>⏹ STOP</span>
+            <button class="btn btn-warning control-btn" on:click={stopSimulation} disabled={!simRunning}>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>
+              STOP
             </button>
-            <button class="btn btn-secondary" on:click={resetSimulation}>
-              <span>🔄 RESET</span>
+            <button class="btn btn-secondary control-btn" on:click={resetSimulation}>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+              RESET
             </button>
           </div>
-          <button class="btn btn-danger" style="width:100%; margin-top:10px" on:click={clearAll} disabled={simRunning}>
+          <button class="btn btn-danger" style="width:100%; margin-top:12px" on:click={clearAll} disabled={simRunning}>
             CLEAR GRID
           </button>
         </section>
 
-        <section class="stats-panel glass glow-panel">
+        <section class="stats-panel glass">
+          <div class="stats-header mono">TELEMETRY</div>
           <div class="stat-row">
-            <span class="label mono">STEP</span>
-            <span class="value mono">{step}</span>
+            <span class="stat-icon">📊</span>
+            <span class="stat-label mono">TASKS</span>
+            <span class="stat-value mono">{layout?.task_pool?.length || 0}</span>
           </div>
-           <div class="stat-row">
-            <span class="label mono">TASKS</span>
-            <span class="value mono">{layout?.task_pool?.length || 0}</span>
+          <div class="stat-row">
+            <span class="stat-icon">🤖</span>
+            <span class="stat-label mono">ROBOTS</span>
+            <span class="stat-value mono">{layout?.robots?.length || 0}</span>
           </div>
-           <div class="stat-row">
-            <span class="label mono">ROBOTS</span>
-            <span class="value mono">{layout?.robots?.length || 0}</span>
-          </div>
-           <div class="stat-row highlight">
-            <span class="label mono">PENDING</span>
-            <span class="value mono" style="color: var(--accent-warning)">{totalWorkload}</span>
+          <div class="stat-row highlight">
+            <span class="stat-icon">⏳</span>
+            <span class="stat-label mono">PENDING</span>
+            <span class="stat-value mono warning">{totalWorkload}</span>
           </div>
         </section>
+
+        <div class="sidebar-footer mono">
+          <span>MARL ENGINE</span>
+          <span class="version">v2.0.0</span>
+        </div>
       </aside>
 
-      <!-- Main Canvas -->
       <section class="canvas-container">
-        <div class="grid-wrapper glow-panel glass">
+        <div class="grid-wrapper glass-accent glow-panel">
+          <div class="grid-header">
+            <span class="mono">WAREHOUSE GRID</span>
+            <span class="mono grid-size">{gridSize}x{gridSize}</span>
+          </div>
           {#key step + robotPositions.length + targets.length + JSON.stringify(layout.map_data)}
             <div class="grid" style="--cols:{gridSize}; --cell:{CELL_SIZE}px">
               {#each layout.map_data as row, y}
                 {#each row as cell, x}
-                  <!-- svelte-ignore a11y-click-events-have-key-events -->
                   <div
                     class="cell"
                     class:rack={cell === 1}
                     class:wall={y === 0 || y === gridSize-1 || x === 0 || x === gridSize-1}
                     class:target={hasTaskAt(y, x)}
                     on:click={() => handleCellClick(y, x)}
+                    on:keydown={(e) => e.key === 'Enter' && handleCellClick(y, x)}
+                    role="button"
+                    tabindex="0"
                   >
                     {#if hasRobotAt(y, x) >= 0}
                       {@const idx = hasRobotAt(y, x)}
                       <div 
                         class="robot" 
                         style="
-                          background: {COLORS.robot[idx % COLORS.robot.length]};
-                          box-shadow: 0 0 10px {COLORS.robot[idx % COLORS.robot.length]};
+                          --robot-color: {COLORS.robot[idx % COLORS.robot.length]};
+                          background: radial-gradient(circle at 30% 30%, {COLORS.robot[idx % COLORS.robot.length]}, {COLORS.robot[idx % COLORS.robot.length]}88);
                         "
                       >
-                        {idx}
+                        <span class="robot-id">{idx}</span>
+                        <div class="robot-ring"></div>
                       </div>
                     {/if}
                     
                     {#if hasTaskAt(y, x) && hasRobotAt(y, x) < 0}
-                      <div class="task-dot"></div>
+                      <div class="task-marker">
+                        <div class="task-dot"></div>
+                        <div class="task-pulse"></div>
+                      </div>
                     {/if}
                   </div>
                 {/each}
@@ -352,7 +403,40 @@
     height: 100vh;
     padding: 1rem;
     gap: 1rem;
+    position: relative;
   }
+
+  .hud-corner {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .hud-corner::before,
+  .hud-corner::after {
+    content: '';
+    position: absolute;
+    background: var(--accent-cyan);
+    opacity: 0.4;
+  }
+
+  .top-left { top: 0; left: 0; }
+  .top-left::before { width: 40px; height: 2px; top: 10px; left: 10px; }
+  .top-left::after { width: 2px; height: 40px; top: 10px; left: 10px; }
+
+  .top-right { top: 0; right: 0; }
+  .top-right::before { width: 40px; height: 2px; top: 10px; right: 10px; }
+  .top-right::after { width: 2px; height: 40px; top: 10px; right: 10px; }
+
+  .bottom-left { bottom: 0; left: 0; }
+  .bottom-left::before { width: 40px; height: 2px; bottom: 10px; left: 10px; }
+  .bottom-left::after { width: 2px; height: 40px; bottom: 10px; left: 10px; }
+
+  .bottom-right { bottom: 0; right: 0; }
+  .bottom-right::before { width: 40px; height: 2px; bottom: 10px; right: 10px; }
+  .bottom-right::after { width: 2px; height: 40px; bottom: 10px; right: 10px; }
 
   header {
     display: flex;
@@ -369,21 +453,81 @@
     gap: 1rem;
   }
 
-  .logo-icon {
-    font-size: 2rem;
-    animation: float 3s ease-in-out infinite;
+  .logo-container {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  h1 {
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    line-height: 1;
+  .logo-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--accent-cyan);
+    border-radius: 50%;
+    animation: spin 10s linear infinite;
+    opacity: 0.5;
   }
+
+  .logo-ring::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-cyan);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 10px var(--accent-cyan);
+  }
+
+  .logo-icon {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--accent-cyan);
+    text-shadow: 0 0 20px var(--accent-cyan);
+  }
+
+  .brand-text h1 {
+    font-size: 1.3rem;
+    letter-spacing: 0.15em;
+    line-height: 1.2;
+  }
+
   .subtitle {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: var(--text-muted);
-    letter-spacing: 0.2em;
+    letter-spacing: 0.25em;
+  }
+
+  .status-display {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .status-label {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  .status-value {
+    font-size: 0.9rem;
+    color: var(--accent-cyan);
+    text-shadow: 0 0 10px var(--accent-cyan);
   }
 
   .status-bar {
@@ -391,23 +535,51 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 1.25rem;
-    background: var(--bg-secondary);
-    border-radius: 20px;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
+    border-radius: 25px;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
     min-width: 200px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .status-bar.online {
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+
+  .status-indicator {
+    position: relative;
+    width: 12px;
+    height: 12px;
   }
 
   .status-dot {
+    position: absolute;
     width: 8px;
     height: 8px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     border-radius: 50%;
-    background: var(--accent-danger);
-    box-shadow: 0 0 8px var(--accent-danger);
+    background: var(--accent-red);
+    box-shadow: 0 0 10px var(--accent-red);
   }
-  .status-dot.online {
-    background: var(--accent-success);
-    box-shadow: 0 0 8px var(--accent-success);
+
+  .status-bar.online .status-dot {
+    background: var(--accent-green);
+    box-shadow: 0 0 10px var(--accent-green);
+  }
+
+  .status-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--accent-red);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .status-bar.online .status-ring {
+    border-color: var(--accent-green);
   }
 
   .content-wrapper {
@@ -417,65 +589,101 @@
     overflow: hidden;
   }
 
-  /* Sidebar */
   .sidebar {
-    width: 280px;
-    padding: 1.5rem;
+    width: 260px;
+    padding: 1.25rem;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
     overflow-y: auto;
   }
 
-  h3 {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    letter-spacing: 0.15em;
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     margin-bottom: 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 0.5rem;
+  }
+
+  .section-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+    opacity: 0.3;
+  }
+
+  .section-header h3 {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.2em;
+    white-space: nowrap;
   }
 
   .tool-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .tool-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1rem;
+    gap: 0.4rem;
+    padding: 0.75rem;
     background: var(--bg-secondary);
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     color: var(--text-secondary);
-    transition: all 0.2s;
+    transition: all 0.25s;
+    cursor: pointer;
   }
 
   .tool-btn:hover:not(:disabled) {
     background: var(--bg-elevated);
     color: var(--text-primary);
+    transform: translateY(-2px);
   }
 
   .tool-btn.active {
-    background: rgba(0, 240, 255, 0.1);
-    border-color: var(--accent-primary);
-    color: var(--accent-primary);
-    box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+    background: rgba(0, 240, 255, 0.08);
+    border-color: var(--tool-color);
+    color: var(--tool-color);
+    box-shadow: 0 0 15px color-mix(in srgb, var(--tool-color) 20%, transparent);
   }
-  
-  .tool-btn .icon {
+
+  .tool-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .tool-icon {
     width: 24px;
     height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tool-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .tool-btn span {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
   }
 
   .control-group {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .control-btn {
+    justify-content: flex-start;
+    padding-left: 1rem;
   }
 
   .stats-panel {
@@ -484,24 +692,73 @@
     background: var(--bg-secondary);
   }
 
+  .stats-header {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
   .stat-row {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 0.5rem;
-    font-size: 0.85rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    font-size: 0.8rem;
   }
-  .stat-row:last-child { margin-bottom: 0; }
-  .stat-row .label { color: var(--text-muted); }
-  .stat-row .value { color: var(--text-primary); font-weight: 700; }
-  
-  /* Canvas */
+
+  .stat-icon {
+    font-size: 0.9rem;
+    width: 20px;
+    text-align: center;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
+    flex: 1;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+  }
+
+  .stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .stat-value.warning {
+    color: var(--accent-amber);
+    text-shadow: 0 0 8px var(--accent-amber);
+  }
+
+  .stat-row.highlight {
+    background: rgba(245, 158, 11, 0.05);
+    margin: 0 -0.5rem;
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .sidebar-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .version {
+    color: var(--accent-cyan);
+  }
+
   .canvas-container {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    padding: 2rem;
+    padding: 1rem;
   }
 
   .grid-wrapper {
@@ -509,11 +766,28 @@
     background: var(--bg-secondary);
   }
 
+  .grid-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+  }
+
+  .grid-size {
+    color: var(--accent-cyan);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(var(--cols), var(--cell));
     gap: 1px;
-    background: rgba(255,255,255,0.05);
+    background: rgba(0, 240, 255, 0.03);
+    border: 1px solid rgba(0, 240, 255, 0.1);
   }
 
   .cell {
@@ -525,25 +799,26 @@
     align-items: center;
     justify-content: center;
     cursor: crosshair;
-    transition: background 0.1s;
+    transition: all 0.15s;
   }
 
   .cell:hover {
-    background: rgba(255,255,255,0.05);
+    background: rgba(0, 240, 255, 0.05);
+    box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.1);
   }
 
   .cell.wall {
-    background: #334155;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     cursor: default;
   }
 
   .cell.rack {
-    background: var(--accent-warning);
-    box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+    background: linear-gradient(135deg, var(--accent-amber) 0%, #b45309 100%);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.4), 0 0 5px rgba(245, 158, 11, 0.3);
   }
 
   .cell.target {
-    background: rgba(0, 255, 157, 0.1);
+    background: rgba(16, 185, 129, 0.1);
   }
 
   .robot {
@@ -553,31 +828,64 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 900;
-    color: #000;
     z-index: 10;
     transition: all 0.15s ease-out;
+    position: relative;
+    box-shadow: 0 0 15px var(--robot-color), 0 2px 8px rgba(0,0,0,0.5);
+  }
+
+  .robot-id {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #000;
+    z-index: 2;
+  }
+
+  .robot-ring {
+    position: absolute;
+    width: 120%;
+    height: 120%;
+    border: 1px solid var(--robot-color);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+    opacity: 0.5;
+  }
+
+  .task-marker {
+    position: relative;
+    width: 50%;
+    height: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .task-dot {
-    width: 30%;
-    height: 30%;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
-    background: var(--accent-success);
-    box-shadow: 0 0 5px var(--accent-success);
-    animation: pulse 2s infinite;
+    background: radial-gradient(circle at 30% 30%, var(--accent-green-bright), var(--accent-green));
+    box-shadow: 0 0 10px var(--accent-green);
   }
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
+  .task-pulse {
+    position: absolute;
+    width: 150%;
+    height: 150%;
+    border: 2px solid var(--accent-green);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-out infinite;
+    opacity: 0.6;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   @keyframes pulse {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.2); opacity: 0.7; }
-    100% { transform: scale(1); opacity: 1; }
+    0% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.3); opacity: 0; }
+    100% { transform: scale(1); opacity: 0; }
   }
 </style>
-

@@ -1,4 +1,4 @@
-name: Wails Build
+name: Wails Build & Release
 
 on:
   push:
@@ -7,56 +7,94 @@ on:
 
 env:
   WAILS_VERSION: v2.9.2
-  GO_VERSION: 1.21
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
 
 jobs:
   build:
-    name: Build on Windows
+    name: Build Windows Application
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Setup Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
-      - name: Setup Node
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
-      - name: Build Wails App
+      - name: Build Wails Application
         working-directory: ./warehouse_ui
         run: |
-          wails build -platform windows/amd64
+          wails build -platform windows/amd64 -webview2 embed
 
-      - name: Upload Artifact
+      - name: Rename Executable
+        run: |
+          mv warehouse_ui/build/bin/warehouse_ui.exe warehouse_ui/build/bin/WarehouseMARL-Windows.exe
+
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WarehouseMARL-Windows
-          path: warehouse_ui/build/bin/warehouse_ui.exe
+          path: warehouse_ui/build/bin/WarehouseMARL-Windows.exe
+          retention-days: 5
 
   release:
-    name: Release
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     steps:
-      - name: Download Artifact
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
         uses: actions/download-artifact@v4
         with:
           name: WarehouseMARL-Windows
+          path: ./release
+
+      - name: Get Tag Version
+        id: tag
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          name: Warehouse MARL ${{ steps.tag.outputs.version }}
+          body: |
+            ## Warehouse MARL ${{ steps.tag.outputs.version }}
+            
+            ### 🚀 What's Included
+            - Windows executable with embedded WebView2 runtime
+            - Futuristic Command Center UI
+            - Multi-Agent Reinforcement Learning simulation
+            
+            ### 📋 Requirements
+            - Windows 10/11 (64-bit)
+            - Python AI Server running on port 8000 (for AI features)
+            
+            ### 🎮 Quick Start
+            1. Download `WarehouseMARL-Windows.exe`
+            2. Run the executable
+            3. (Optional) Start the AI server for robot AI features
+            
+            ---
+            *Built with Wails ${{ env.WAILS_VERSION }} + Go ${{ env.GO_VERSION }}*
           files: |
-            warehouse_ui.exe
+            ./release/WarehouseMARL-Windows.exe
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

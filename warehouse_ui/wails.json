@@ -1,6 +1,6 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "warehouse_ui",
+  "name": "Warehouse MARL",
   "outputfilename": "warehouse_ui",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
@@ -9,5 +9,12 @@
   "author": {
     "name": "JullMol",
     "email": "dimasrafiizzulhaq@gmail.com"
+  },
+  "info": {
+    "companyName": "JullMol",
+    "productName": "Warehouse MARL",
+    "productVersion": "2.0.0",
+    "copyright": "Copyright © 2026 JullMol",
+    "comments": "Multi-Agent Reinforcement Learning Warehouse Simulation"
   }
 }
